@@ -44,6 +44,12 @@ struct Context {
     glm::vec3 specularColor = glm::vec3(0 / 255.0f, 253 / 255.0f, 97 / 255.0f);
     float specularPower = 2.0f;
 
+    // Camera Parameters
+    glm::mat4 projectionMatrix;
+    float fov = 45.0f;
+    float zoomFactor = 0.0f;
+    float orthographicScale = 3.0f;
+
     // Flags
     bool useLighting = true;
     bool useDiffuseLighting = true;
@@ -85,6 +91,25 @@ void do_initialization(Context &ctx)
     gltf::create_drawables_from_gltf_asset(ctx.drawables, ctx.asset);
 }
 
+void calculate_projection(Context &ctx)
+{
+    // If orthographic projection
+    if (ctx.useOrthographicProjection)
+    {
+        // Calculate the aspect ratio
+        float aspect = static_cast<float>(ctx.width) / static_cast<float>(ctx.height);
+        // Create orthographic projection matrix using the context scale and aspect ratio
+        ctx.projectionMatrix = glm::ortho(-aspect * ctx.orthographicScale, aspect * ctx.orthographicScale
+                                          , -ctx.orthographicScale, ctx.orthographicScale, 0.1f, 100.0f);
+    }
+    // If prespective projection
+    else
+    {
+        // Create prespective projection matrix using the context FOV
+        ctx.projectionMatrix = glm::perspective(glm::radians(ctx.fov), (float)ctx.width/ctx.height, 1.0f, 100.0f);
+    }    
+}
+
 void draw_scene(Context &ctx)
 {
     // Activate shader program
@@ -96,16 +121,11 @@ void draw_scene(Context &ctx)
     // Define per-scene uniforms
     glm::mat4 model = glm::mat4(1.0f);
     glm::mat4 view = glm::lookAt(glm::vec3(0, 0, 5), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0)) * glm::mat4(ctx.trackball.orient);
-    glm::mat4 prespectiveProjection = glm::perspective(45.0f, (float)ctx.width/ctx.height, 1.0f, 100.0f);
-
-    float scale = 3.0f;
-    float aspect = static_cast<float>(ctx.width) / static_cast<float>(ctx.height);
-    glm::mat4 orthoProjection = glm::ortho(-aspect * scale, aspect * scale, -scale, scale, 0.1f, 100.0f);
+    calculate_projection(ctx);
 
     // Model and View matrices
     glUniformMatrix4fv(glGetUniformLocation(ctx.program, "u_view"), 1, GL_FALSE, &view[0][0]);
-    glUniformMatrix4fv(glGetUniformLocation(ctx.program, "u_projection_prespective"), 1, GL_FALSE, &prespectiveProjection[0][0]);
-    glUniformMatrix4fv(glGetUniformLocation(ctx.program, "u_projection_orthographic"), 1, GL_FALSE, &orthoProjection[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(ctx.program, "u_projection"), 1, GL_FALSE, &ctx.projectionMatrix[0][0]);
 
     // Elapsed time
     glUniform1f(glGetUniformLocation(ctx.program, "u_time"), ctx.elapsedTime);
@@ -123,7 +143,6 @@ void draw_scene(Context &ctx)
     glUniform1i(glGetUniformLocation(ctx.program, "u_useAmbientLighting"), ctx.useAmbientLighting);
     glUniform1f(glGetUniformLocation(ctx.program, "u_useSpecularLighting"), ctx.useSpecularLighting);
     glUniform1f(glGetUniformLocation(ctx.program, "u_useNormalsAsColor"), ctx.useNormalsAsColor);
-    glUniform1f(glGetUniformLocation(ctx.program, "u_useOrthographicProjection"), ctx.useOrthographicProjection);
 
     // ...
 
@@ -214,11 +233,34 @@ void cursor_pos_callback(GLFWwindow *window, double x, double y)
     cg::trackball_move(ctx->trackball, float(x), float(y));
 }
 
+void update_fov(Context &ctx, double yOffset)
+{
+    // Update the zoom factor
+    ctx.zoomFactor = yOffset;
+
+    // Update the current FOV of the camera
+    ctx.fov -= ctx.zoomFactor * 1.3f;
+
+    // Limit the FOV between 1 to 100 degrees
+    if (ctx.fov < 1)
+    {
+        ctx.fov = 1.0f;
+    }
+    else if (ctx.fov > 100.0f)
+    {
+        ctx.fov = 100.0f;
+    }
+}
+
 void scroll_callback(GLFWwindow *window, double x, double y)
 {
     // Forward event to ImGui
     ImGui_ImplGlfw_ScrollCallback(window, x, y);
     if (ImGui::GetIO().WantCaptureMouse) return;
+
+    // Update the zoom parameter and camera's FOV
+    Context *ctx = static_cast<Context *>(glfwGetWindowUserPointer(window));
+    update_fov(*ctx, y);
 }
 
 void resize_callback(GLFWwindow *window, int width, int height)
@@ -308,8 +350,10 @@ int main(int argc, char *argv[])
         ImGui::ShowDemoWindow();
         show_gui_widgets(ctx);
         do_rendering(ctx);
+        calculate_projection(ctx);
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
 
         glfwSwapBuffers(ctx.window);
     }

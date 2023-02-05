@@ -7,8 +7,7 @@ uniform float u_time;
 // Model, View, Projection
 uniform mat4 u_model;
 uniform mat4 u_view;
-uniform mat4 u_projection_prespective;
-uniform mat4 u_projection_orthographic;
+uniform mat4 u_projection;
 
 // Lighting
 uniform vec3 u_diffuseColor;
@@ -23,7 +22,6 @@ uniform bool u_useDiffuseLighting;
 uniform bool u_useAmbientLighting;
 uniform bool u_useSpecularLighting;
 uniform bool u_useNormalsAsColor;
-uniform bool u_useOrthographicProjection;
 
 // ...
 
@@ -41,16 +39,8 @@ void main()
 {
     // Calculate MVP matrix
     mat4 mv = u_view * u_model;
-    mat4 mvp;
-    if (u_useOrthographicProjection)
-    {
-        mvp = u_projection_orthographic * mv;
-    }
-    else
-    {
-        mvp = u_projection_prespective * mv;
-    }
-
+    mat4 mvp = u_projection * mv;
+    
     // Calculate the coordinates of the vertex
     gl_Position = mvp * vec4(a_position.xyz, 1.0f);
 
