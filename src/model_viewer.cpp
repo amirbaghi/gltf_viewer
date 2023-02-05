@@ -17,6 +17,7 @@
 #include <imgui_impl_opengl3.h>
 
 #include <glm/glm.hpp>
+#include <glm/gtx/quaternion.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <cstdlib>
@@ -33,7 +34,13 @@ struct Context {
     GLuint program;
     GLuint emptyVAO;
     float elapsedTime;
-    std::string gltfFilename = "triangle.gltf";
+    std::string gltfFilename = "armadillo.gltf";
+    glm::vec4 backgroundColor;
+    glm::vec3 diffuseColor;
+    glm::vec3 lightPosition;
+    glm::vec3 ambientColor;
+    glm::vec3 specularColor;
+    float specularPower;
     // Add more variables here...
 };
 
@@ -76,7 +83,21 @@ void draw_scene(Context &ctx)
     glEnable(GL_DEPTH_TEST);  // Enable Z-buffering
 
     // Define per-scene uniforms
+    glm::mat4 model = glm::mat4(1.0f);
+    glm::mat4 view = glm::lookAt(glm::vec3(0, 0, 5), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0)) * glm::mat4(ctx.trackball.orient);
+    glm::mat4 projection = glm::perspective(45.0f, (float)ctx.width/ctx.height, 1.0f, 100.0f);
+    glUniformMatrix4fv(glGetUniformLocation(ctx.program, "u_view"), 1, GL_FALSE, &view[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(ctx.program, "u_projection"), 1, GL_FALSE, &projection[0][0]);
+
     glUniform1f(glGetUniformLocation(ctx.program, "u_time"), ctx.elapsedTime);
+
+    glUniform3fv(glGetUniformLocation(ctx.program, "u_lightPosition"), 1, &ctx.lightPosition[0]);
+    glUniform3fv(glGetUniformLocation(ctx.program, "u_diffuseColor"), 1, &ctx.diffuseColor[0]);
+
+    glUniform3fv(glGetUniformLocation(ctx.program, "u_specularColor"), 1, &ctx.specularColor[0]);
+    glUniform1f(glGetUniformLocation(ctx.program, "u_specularPower"), ctx.specularPower);
+    
+    glUniform3fv(glGetUniformLocation(ctx.program, "u_ambientColor"), 1, &ctx.ambientColor[0]);
     // ...
 
     // Draw scene
@@ -84,7 +105,9 @@ void draw_scene(Context &ctx)
         const gltf::Node &node = ctx.asset.nodes[i];
         const gltf::Drawable &drawable = ctx.drawables[node.mesh];
 
-        // Define per-object uniforms
+        // Define per-object uniforms   
+        model = glm::scale(glm::toMat4(node.rotation) * glm::translate(model, node.translation), node.scale);
+        glUniformMatrix4fv(glGetUniformLocation(ctx.program, "u_model"), 1, GL_FALSE, &model[0][0]);
         // ...
 
         // Draw object
@@ -105,7 +128,7 @@ void do_rendering(Context &ctx)
     cg::reset_gl_render_state();
 
     // Clear color and depth buffers
-    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClearColor(ctx.backgroundColor.r, ctx.backgroundColor.g, ctx.backgroundColor.b, ctx.backgroundColor[3]);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     draw_scene(ctx);
@@ -180,6 +203,16 @@ void resize_callback(GLFWwindow *window, int width, int height)
     glViewport(0, 0, width, height);
 }
 
+void show_gui_widgets(Context& ctx)
+{
+    ImGui::ColorEdit4("Background Color", &ctx.backgroundColor[0]);
+    ImGui::ColorEdit3("Diffuse Color", &ctx.diffuseColor[0]);
+    ImGui::ColorEdit3("Ambient Color", &ctx.ambientColor[0]);
+    ImGui::ColorEdit3("Specular Color", &ctx.specularColor[0]);
+    ImGui::InputFloat("Specular Power", &ctx.specularPower);
+    ImGui::SliderFloat3("Light Source Position", &ctx.lightPosition[0], 0.0f, 1.0f);
+}
+
 int main(int argc, char *argv[])
 {
     Context ctx = Context();
@@ -228,7 +261,8 @@ int main(int argc, char *argv[])
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-        // ImGui::ShowDemoWindow();
+        ImGui::ShowDemoWindow();
+        show_gui_widgets(ctx);
         do_rendering(ctx);
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
