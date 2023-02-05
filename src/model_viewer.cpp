@@ -35,12 +35,23 @@ struct Context {
     GLuint emptyVAO;
     float elapsedTime;
     std::string gltfFilename = "armadillo.gltf";
-    glm::vec4 backgroundColor;
-    glm::vec3 diffuseColor;
+    glm::vec4 backgroundColor = glm::vec4(78 / 255.0f, 30 / 255.0f, 61 / 255.0f, 1.0f);
+
+    // Lighting Parameters
+    glm::vec3 ambientColor = glm::vec3(31 / 255.0f, 3 / 255.0f, 13 / 255.0f);
     glm::vec3 lightPosition;
-    glm::vec3 ambientColor;
-    glm::vec3 specularColor;
-    float specularPower;
+    glm::vec3 diffuseColor = glm::vec3(15 / 255.0f, 23 / 255.0f, 159 / 255.0f);
+    glm::vec3 specularColor = glm::vec3(0 / 255.0f, 253 / 255.0f, 97 / 255.0f);
+    float specularPower = 2.0f;
+
+    // Flags
+    bool useLighting = true;
+    bool useDiffuseLighting = true;
+    bool useAmbientLighting = true;
+    bool useSpecularLighting = true;
+    bool useNormalsAsColor = false;
+    bool useOrthographicProjection = false;
+
     // Add more variables here...
 };
 
@@ -85,19 +96,35 @@ void draw_scene(Context &ctx)
     // Define per-scene uniforms
     glm::mat4 model = glm::mat4(1.0f);
     glm::mat4 view = glm::lookAt(glm::vec3(0, 0, 5), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0)) * glm::mat4(ctx.trackball.orient);
-    glm::mat4 projection = glm::perspective(45.0f, (float)ctx.width/ctx.height, 1.0f, 100.0f);
-    glUniformMatrix4fv(glGetUniformLocation(ctx.program, "u_view"), 1, GL_FALSE, &view[0][0]);
-    glUniformMatrix4fv(glGetUniformLocation(ctx.program, "u_projection"), 1, GL_FALSE, &projection[0][0]);
+    glm::mat4 prespectiveProjection = glm::perspective(45.0f, (float)ctx.width/ctx.height, 1.0f, 100.0f);
 
+    float scale = 3.0f;
+    float aspect = static_cast<float>(ctx.width) / static_cast<float>(ctx.height);
+    glm::mat4 orthoProjection = glm::ortho(-aspect * scale, aspect * scale, -scale, scale, 0.1f, 100.0f);
+
+    // Model and View matrices
+    glUniformMatrix4fv(glGetUniformLocation(ctx.program, "u_view"), 1, GL_FALSE, &view[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(ctx.program, "u_projection_prespective"), 1, GL_FALSE, &prespectiveProjection[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(ctx.program, "u_projection_orthographic"), 1, GL_FALSE, &orthoProjection[0][0]);
+
+    // Elapsed time
     glUniform1f(glGetUniformLocation(ctx.program, "u_time"), ctx.elapsedTime);
 
+    // Lighting Parameters
     glUniform3fv(glGetUniformLocation(ctx.program, "u_lightPosition"), 1, &ctx.lightPosition[0]);
     glUniform3fv(glGetUniformLocation(ctx.program, "u_diffuseColor"), 1, &ctx.diffuseColor[0]);
-
     glUniform3fv(glGetUniformLocation(ctx.program, "u_specularColor"), 1, &ctx.specularColor[0]);
     glUniform1f(glGetUniformLocation(ctx.program, "u_specularPower"), ctx.specularPower);
-    
     glUniform3fv(glGetUniformLocation(ctx.program, "u_ambientColor"), 1, &ctx.ambientColor[0]);
+
+    // Flags
+    glUniform1i(glGetUniformLocation(ctx.program, "u_useLighting"), ctx.useLighting);
+    glUniform1i(glGetUniformLocation(ctx.program, "u_useDiffuseLighting"), ctx.useDiffuseLighting);
+    glUniform1i(glGetUniformLocation(ctx.program, "u_useAmbientLighting"), ctx.useAmbientLighting);
+    glUniform1f(glGetUniformLocation(ctx.program, "u_useSpecularLighting"), ctx.useSpecularLighting);
+    glUniform1f(glGetUniformLocation(ctx.program, "u_useNormalsAsColor"), ctx.useNormalsAsColor);
+    glUniform1f(glGetUniformLocation(ctx.program, "u_useOrthographicProjection"), ctx.useOrthographicProjection);
+
     // ...
 
     // Draw scene
@@ -205,12 +232,29 @@ void resize_callback(GLFWwindow *window, int width, int height)
 
 void show_gui_widgets(Context& ctx)
 {
+    // Misc
+    ImGui::CollapsingHeader("Projection");
+    ImGui::Checkbox("Use Orthographic Projection", &ctx.useOrthographicProjection);
+
+    // Background Color
+    ImGui::CollapsingHeader("Background");
     ImGui::ColorEdit4("Background Color", &ctx.backgroundColor[0]);
-    ImGui::ColorEdit3("Diffuse Color", &ctx.diffuseColor[0]);
+
+    // Lighting
+    ImGui::CollapsingHeader("Lighting");
+    ImGui::Checkbox("Use Lighting", &ctx.useLighting);
     ImGui::ColorEdit3("Ambient Color", &ctx.ambientColor[0]);
+    ImGui::Checkbox("Use Ambient Lighting", &ctx.useAmbientLighting);
+    ImGui::ColorEdit3("Diffuse Color", &ctx.diffuseColor[0]);
+    ImGui::Checkbox("Use Diffuse Lighting", &ctx.useDiffuseLighting);
     ImGui::ColorEdit3("Specular Color", &ctx.specularColor[0]);
     ImGui::InputFloat("Specular Power", &ctx.specularPower);
+    ImGui::Checkbox("Use Specular Lighting", &ctx.useSpecularLighting);
     ImGui::SliderFloat3("Light Source Position", &ctx.lightPosition[0], 0.0f, 1.0f);
+
+    // Misc
+    ImGui::CollapsingHeader("Misc.");
+    ImGui::Checkbox("Use Normals as RGB Colors", &ctx.useNormalsAsColor);
 }
 
 int main(int argc, char *argv[])
