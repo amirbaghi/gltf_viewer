@@ -44,6 +44,9 @@ struct Context {
     glm::vec3 specularColor = glm::vec3(0 / 255.0f, 253 / 255.0f, 97 / 255.0f);
     float specularPower = 2.0f;
 
+    // Cube Map
+    GLuint cubemap;
+
     // Camera Parameters
     glm::mat4 projectionMatrix;
     float fov = 45.0f;
@@ -57,6 +60,8 @@ struct Context {
     bool useSpecularLighting = true;
     bool useNormalsAsColor = false;
     bool useOrthographicProjection = false;
+    bool useGammaCorrection = false;
+    bool useCubemap = false;
 
     // Add more variables here...
 };
@@ -70,6 +75,17 @@ std::string shader_dir(void)
         std::exit(EXIT_FAILURE);
     }
     return rootDir + "/src/shaders/";
+}
+
+// Returns the absolute path to the assets/cubemaps directory
+std::string cubemap_dir(void)
+{
+    std::string rootDir = cg::get_env_var("MODEL_VIEWER_ROOT");
+    if (rootDir.empty()) {
+        std::cout << "Error: MODEL_VIEWER_ROOT is not set." << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
+    return rootDir + "/assets/cubemaps/";
 }
 
 // Returns the absolute path to the assets/gltf directory
@@ -87,6 +103,7 @@ void do_initialization(Context &ctx)
 {
     ctx.program = cg::load_shader_program(shader_dir() + "mesh.vert", shader_dir() + "mesh.frag");
 
+    ctx.cubemap = cg::load_cubemap(cubemap_dir() + "/RomeChurch/");
     gltf::load_gltf_asset(ctx.gltfFilename, gltf_dir(), ctx.asset);
     gltf::create_drawables_from_gltf_asset(ctx.drawables, ctx.asset);
 }
@@ -130,6 +147,11 @@ void draw_scene(Context &ctx)
     // Elapsed time
     glUniform1f(glGetUniformLocation(ctx.program, "u_time"), ctx.elapsedTime);
 
+    // Textures and Cubemaps
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, ctx.cubemap);
+    glUniform1i(glGetUniformLocation(ctx.cubemap, "u_cubemap"), 0);
+
     // Lighting Parameters
     glUniform3fv(glGetUniformLocation(ctx.program, "u_lightPosition"), 1, &ctx.lightPosition[0]);
     glUniform3fv(glGetUniformLocation(ctx.program, "u_diffuseColor"), 1, &ctx.diffuseColor[0]);
@@ -143,6 +165,8 @@ void draw_scene(Context &ctx)
     glUniform1i(glGetUniformLocation(ctx.program, "u_useAmbientLighting"), ctx.useAmbientLighting);
     glUniform1f(glGetUniformLocation(ctx.program, "u_useSpecularLighting"), ctx.useSpecularLighting);
     glUniform1f(glGetUniformLocation(ctx.program, "u_useNormalsAsColor"), ctx.useNormalsAsColor);
+    glUniform1f(glGetUniformLocation(ctx.program, "u_useGammaCorrection"), ctx.useGammaCorrection);
+    glUniform1f(glGetUniformLocation(ctx.program, "u_useCubemap"), ctx.useCubemap);
 
     // ...
 
@@ -297,6 +321,8 @@ void show_gui_widgets(Context& ctx)
     // Misc
     ImGui::CollapsingHeader("Misc.");
     ImGui::Checkbox("Use Normals as RGB Colors", &ctx.useNormalsAsColor);
+    ImGui::Checkbox("Use Gamma Correction", &ctx.useGammaCorrection);
+    ImGui::Checkbox("Environment Mapping", &ctx.useCubemap);
 }
 
 int main(int argc, char *argv[])
