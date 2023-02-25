@@ -44,8 +44,8 @@ struct Context {
     glm::vec3 specularColor = glm::vec3(0 / 255.0f, 253 / 255.0f, 97 / 255.0f);
     float specularPower = 2.0f;
 
-    // Cube Map
-    GLuint cubemap;
+    // Cube Map Active Texture ID
+    int cubemap;
 
     // Camera Parameters
     glm::mat4 projectionMatrix;
@@ -61,7 +61,7 @@ struct Context {
     bool useNormalsAsColor = false;
     bool useOrthographicProjection = false;
     bool useGammaCorrection = false;
-    bool useCubemap = false;
+    bool useCubemap = true;
 
     // Add more variables here...
 };
@@ -99,11 +99,30 @@ std::string gltf_dir(void)
     return rootDir + "/assets/gltf/";
 }
 
+void load_cubemaps(Context &ctx, std::string cubemap_name)
+{
+    // Load basic cubemap
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, cg::load_cubemap(cubemap_dir() + cubemap_name));
+
+    // Load pre-filtered cubemaps
+    float filters[] = {0.125, 0.5, 2, 8, 32, 128, 512, 2048};
+    for (int i = 7, idOffset = 0; i >= 0; i--, idOffset++)
+    {
+        glActiveTexture(GL_TEXTURE1 + idOffset);
+        std::string filename = std::to_string(filters[i]);
+        filename.erase ( filename.find_last_not_of('0') + 1, std::string::npos);
+        filename.erase ( filename.find_last_not_of('.') + 1, std::string::npos);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, cg::load_cubemap(cubemap_dir() + cubemap_name + "/prefiltered/" + filename));
+    }
+}
+
 void do_initialization(Context &ctx)
 {
     ctx.program = cg::load_shader_program(shader_dir() + "mesh.vert", shader_dir() + "mesh.frag");
 
-    ctx.cubemap = cg::load_cubemap(cubemap_dir() + "/RomeChurch/");
+    load_cubemaps(ctx, "Forrest");
+
     gltf::load_gltf_asset(ctx.gltfFilename, gltf_dir(), ctx.asset);
     gltf::create_drawables_from_gltf_asset(ctx.drawables, ctx.asset);
 }
@@ -148,9 +167,7 @@ void draw_scene(Context &ctx)
     glUniform1f(glGetUniformLocation(ctx.program, "u_time"), ctx.elapsedTime);
 
     // Textures and Cubemaps
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, ctx.cubemap);
-    glUniform1i(glGetUniformLocation(ctx.cubemap, "u_cubemap"), 0);
+    glUniform1i(glGetUniformLocation(ctx.program, "u_cubemap"), ctx.cubemap);
 
     // Lighting Parameters
     glUniform3fv(glGetUniformLocation(ctx.program, "u_lightPosition"), 1, &ctx.lightPosition[0]);
@@ -299,30 +316,44 @@ void resize_callback(GLFWwindow *window, int width, int height)
 void show_gui_widgets(Context& ctx)
 {
     // Misc
-    ImGui::CollapsingHeader("Projection");
-    ImGui::Checkbox("Use Orthographic Projection", &ctx.useOrthographicProjection);
+    if (ImGui::CollapsingHeader("Projection"))
+    {
+        ImGui::Checkbox("Use Orthographic Projection", &ctx.useOrthographicProjection);
+    }
 
     // Background Color
-    ImGui::CollapsingHeader("Background");
-    ImGui::ColorEdit4("Background Color", &ctx.backgroundColor[0]);
+    if (ImGui::CollapsingHeader("Background"))
+    {
+        ImGui::ColorEdit4("Background Color", &ctx.backgroundColor[0]);
+    }
 
     // Lighting
-    ImGui::CollapsingHeader("Lighting");
-    ImGui::Checkbox("Use Lighting", &ctx.useLighting);
-    ImGui::ColorEdit3("Ambient Color", &ctx.ambientColor[0]);
-    ImGui::Checkbox("Use Ambient Lighting", &ctx.useAmbientLighting);
-    ImGui::ColorEdit3("Diffuse Color", &ctx.diffuseColor[0]);
-    ImGui::Checkbox("Use Diffuse Lighting", &ctx.useDiffuseLighting);
-    ImGui::ColorEdit3("Specular Color", &ctx.specularColor[0]);
-    ImGui::InputFloat("Specular Power", &ctx.specularPower);
-    ImGui::Checkbox("Use Specular Lighting", &ctx.useSpecularLighting);
-    ImGui::SliderFloat3("Light Source Position", &ctx.lightPosition[0], 0.0f, 1.0f);
+    if (ImGui::CollapsingHeader("Lighting"))
+    {
+        ImGui::Checkbox("Use Lighting", &ctx.useLighting);
+        ImGui::ColorEdit3("Ambient Color", &ctx.ambientColor[0]);
+        ImGui::Checkbox("Use Ambient Lighting", &ctx.useAmbientLighting);
+        ImGui::ColorEdit3("Diffuse Color", &ctx.diffuseColor[0]);
+        ImGui::Checkbox("Use Diffuse Lighting", &ctx.useDiffuseLighting);
+        ImGui::ColorEdit3("Specular Color", &ctx.specularColor[0]);
+        ImGui::InputFloat("Specular Power", &ctx.specularPower);
+        ImGui::Checkbox("Use Specular Lighting", &ctx.useSpecularLighting);
+        ImGui::SliderFloat3("Light Source Position", &ctx.lightPosition[0], 0.0f, 1.0f);
+    }
+
+    // Enivronment Mapping
+    if (ImGui::CollapsingHeader("Environment Mapping"))
+    {
+        ImGui::Checkbox("Use Environment Mapping", &ctx.useCubemap);
+        ImGui::SliderInt("Cubemap Index", &ctx.cubemap, 0, 8);
+    }
 
     // Misc
-    ImGui::CollapsingHeader("Misc.");
-    ImGui::Checkbox("Use Normals as RGB Colors", &ctx.useNormalsAsColor);
-    ImGui::Checkbox("Use Gamma Correction", &ctx.useGammaCorrection);
-    ImGui::Checkbox("Environment Mapping", &ctx.useCubemap);
+    if (ImGui::CollapsingHeader("Misc."))
+    {
+        ImGui::Checkbox("Use Normals as RGB Colors", &ctx.useNormalsAsColor);
+        ImGui::Checkbox("Use Gamma Correction", &ctx.useGammaCorrection);
+    }
 }
 
 int main(int argc, char *argv[])
