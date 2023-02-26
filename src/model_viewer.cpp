@@ -35,17 +35,21 @@ struct Context {
     GLuint emptyVAO;
     float elapsedTime;
     std::string gltfFilename = "armadillo.gltf";
-    glm::vec4 backgroundColor = glm::vec4(78 / 255.0f, 30 / 255.0f, 61 / 255.0f, 1.0f);
+    glm::vec4 backgroundColor = glm::vec4(0);
 
     // Lighting Parameters
-    glm::vec3 ambientColor = glm::vec3(31 / 255.0f, 3 / 255.0f, 13 / 255.0f);
+    glm::vec3 ambientColor = glm::vec3(0.01);
     glm::vec3 lightPosition;
-    glm::vec3 diffuseColor = glm::vec3(15 / 255.0f, 23 / 255.0f, 159 / 255.0f);
-    glm::vec3 specularColor = glm::vec3(0 / 255.0f, 253 / 255.0f, 97 / 255.0f);
+    glm::vec3 diffuseColor = glm::vec3(0.01);
+    glm::vec3 specularColor = glm::vec3(0.04);
     float specularPower = 2.0f;
 
+    // Textures
+    gltf::TextureList textures;
+    int baseColorTextureId = 9;
+
     // Cube Map Active Texture ID
-    int cubemap;
+    int cubemapId;
 
     // Camera Parameters
     glm::mat4 projectionMatrix;
@@ -60,8 +64,10 @@ struct Context {
     bool useSpecularLighting = true;
     bool useNormalsAsColor = false;
     bool useOrthographicProjection = false;
-    bool useGammaCorrection = false;
-    bool useCubemap = true;
+    bool useGammaCorrection = true;
+    bool useCubemap = false;
+    bool visualiseTextureCoords = false;
+    bool useTexture = true;
 
     // Add more variables here...
 };
@@ -125,6 +131,7 @@ void do_initialization(Context &ctx)
 
     gltf::load_gltf_asset(ctx.gltfFilename, gltf_dir(), ctx.asset);
     gltf::create_drawables_from_gltf_asset(ctx.drawables, ctx.asset);
+    gltf::create_textures_from_gltf_asset(ctx.textures, ctx.asset);
 }
 
 void calculate_projection(Context &ctx)
@@ -167,7 +174,8 @@ void draw_scene(Context &ctx)
     glUniform1f(glGetUniformLocation(ctx.program, "u_time"), ctx.elapsedTime);
 
     // Textures and Cubemaps
-    glUniform1i(glGetUniformLocation(ctx.program, "u_cubemap"), ctx.cubemap);
+    glUniform1i(glGetUniformLocation(ctx.program, "u_baseColorTexture"), ctx.baseColorTextureId);
+    glUniform1i(glGetUniformLocation(ctx.program, "u_cubemap"), ctx.cubemapId);
 
     // Lighting Parameters
     glUniform3fv(glGetUniformLocation(ctx.program, "u_lightPosition"), 1, &ctx.lightPosition[0]);
@@ -180,10 +188,13 @@ void draw_scene(Context &ctx)
     glUniform1i(glGetUniformLocation(ctx.program, "u_useLighting"), ctx.useLighting);
     glUniform1i(glGetUniformLocation(ctx.program, "u_useDiffuseLighting"), ctx.useDiffuseLighting);
     glUniform1i(glGetUniformLocation(ctx.program, "u_useAmbientLighting"), ctx.useAmbientLighting);
-    glUniform1f(glGetUniformLocation(ctx.program, "u_useSpecularLighting"), ctx.useSpecularLighting);
-    glUniform1f(glGetUniformLocation(ctx.program, "u_useNormalsAsColor"), ctx.useNormalsAsColor);
-    glUniform1f(glGetUniformLocation(ctx.program, "u_useGammaCorrection"), ctx.useGammaCorrection);
-    glUniform1f(glGetUniformLocation(ctx.program, "u_useCubemap"), ctx.useCubemap);
+    glUniform1i(glGetUniformLocation(ctx.program, "u_useSpecularLighting"), ctx.useSpecularLighting);
+    glUniform1i(glGetUniformLocation(ctx.program, "u_useNormalsAsColor"), ctx.useNormalsAsColor);
+    glUniform1i(glGetUniformLocation(ctx.program, "u_useGammaCorrection"), ctx.useGammaCorrection);
+    glUniform1i(glGetUniformLocation(ctx.program, "u_useCubemap"), ctx.useCubemap);
+    glUniform1i(glGetUniformLocation(ctx.program, "u_visualiseTexCoords"), ctx.visualiseTextureCoords);
+    glUniform1i(glGetUniformLocation(ctx.program, "u_useTexture"), ctx.useTexture);
+    glUniform1i(glGetUniformLocation(ctx.program, "u_hasTexture"), false);
 
     // ...
 
@@ -196,6 +207,29 @@ void draw_scene(Context &ctx)
         model = glm::scale(glm::toMat4(node.rotation) * glm::translate(model, node.translation), node.scale);
         glUniformMatrix4fv(glGetUniformLocation(ctx.program, "u_model"), 1, GL_FALSE, &model[0][0]);
         // ...
+
+        // Get Texture data for this node if it has any
+        const gltf::Mesh &mesh = ctx.asset.meshes[node.mesh];
+        if (mesh.primitives[0].hasMaterial)
+        {
+            const gltf::Primitive &primitive = mesh.primitives[0];
+            const gltf::Material &material = ctx.asset.materials[primitive.material];
+            const gltf::PBRMetallicRoughness &pbr = material.pbrMetallicRoughness;
+
+            // Define material textures and uniforms
+            if (pbr.hasBaseColorTexture)
+            {
+                GLuint texture_id = ctx.textures[pbr.baseColorTexture.index];
+                glActiveTexture(GL_TEXTURE0 + ctx.baseColorTextureId);
+                glBindTexture(GL_TEXTURE_2D, texture_id);
+                glUniform1i(glGetUniformLocation(ctx.program, "u_hasTexture"), true);
+            }
+            else
+            {
+                // If no texture is defined, set the hasTexture flag to 0
+                glUniform1i(glGetUniformLocation(ctx.program, "u_hasTexture"), false);
+            }
+        }
 
         // Draw object
         glBindVertexArray(drawable.vao);
@@ -345,7 +379,14 @@ void show_gui_widgets(Context& ctx)
     if (ImGui::CollapsingHeader("Environment Mapping"))
     {
         ImGui::Checkbox("Use Environment Mapping", &ctx.useCubemap);
-        ImGui::SliderInt("Cubemap Index", &ctx.cubemap, 0, 8);
+        ImGui::SliderInt("Cubemap Index", &ctx.cubemapId, 0, 8);
+    }
+
+    // Texture Mapping
+    if (ImGui::CollapsingHeader("Texture Mapping"))
+    {
+        ImGui::Checkbox("Use Texture Mapping", &ctx.useTexture);
+        ImGui::Checkbox("Visualise Texture Coordinates", &ctx.visualiseTextureCoords);
     }
 
     // Misc

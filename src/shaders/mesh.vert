@@ -18,6 +18,7 @@ uniform vec3 u_lightPosition;
 layout(location = 0) in vec4 a_position;
 layout(location = 1) in vec3 a_color;
 layout(location = 2) in vec3 a_normal;
+layout(location = 3) in vec2 a_texcoord_0;
 // ...
 
 // Vertex shader outputs
@@ -26,6 +27,7 @@ out vec3 L;
 out vec3 V;
 out vec3 v_normal;
 out vec3 v_color;
+out vec2 v_texcoord_0;
 // ...
 
 void main()
@@ -47,7 +49,8 @@ void main()
     // Calculate the view-space light direction
     L = normalize(u_lightPosition - positionEye);
 
-    // Pass the normal and color to the fragment shader
+    // Pass the normal and color and tex coords to the fragment shader
     v_normal = a_normal;
     v_color = a_color;
+    v_texcoord_0 = a_texcoord_0;
 }
