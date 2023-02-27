@@ -188,8 +188,8 @@ void update_shadowmap(Context &ctx, ShadowCastingLight &light, GLuint shadowFBO)
     // view matrix should be a lookAt-matrix computed from the light source
     // position, and the projection matrix should be a frustum that covers the
     // parts of the scene that shall recieve shadows.
-    glm::mat4 view = glm::lookAt(glm::vec3(0, 0, 10), glm::vec3(0,0,0), glm::vec3(0,1,0));
-    glm::mat4 proj = glm::perspective(glm::radians(ctx.fov), (float)512/512, 1.0f, 100.0f);
+    glm::mat4 view = glm::lookAt(glm::vec3(2, 2, 2), glm::vec3(0,0,0), glm::vec3(0,1,0)) * glm::mat4(ctx.trackball.orient);
+    glm::mat4 proj = glm::perspective(glm::radians(45.0f), (float)512/512, 1.0f, 100.0f);
 
     glUniformMatrix4fv(glGetUniformLocation(ctx.shadowProgram, "u_view"), 1, GL_FALSE, &view[0][0]);
     glUniformMatrix4fv(glGetUniformLocation(ctx.shadowProgram, "u_proj"), 1, GL_FALSE, &proj[0][0]);
@@ -249,6 +249,9 @@ void draw_scene(Context &ctx)
     glUniformMatrix4fv(glGetUniformLocation(ctx.program, "u_view"), 1, GL_FALSE, &view[0][0]);
     glUniformMatrix4fv(glGetUniformLocation(ctx.program, "u_projection"), 1, GL_FALSE, &ctx.projectionMatrix[0][0]);
 
+    glm::mat4 shadowFromView = ctx.light.shadowMatrix * glm::inverse(view);
+    glUniformMatrix4fv(glGetUniformLocation(ctx.program, "u_shadowFromView"), 1, GL_FALSE, &shadowFromView[0][0]);
+
     // Elapsed time
     glUniform1f(glGetUniformLocation(ctx.program, "u_time"), ctx.elapsedTime);
 
@@ -256,6 +259,10 @@ void draw_scene(Context &ctx)
     glUniform1i(glGetUniformLocation(ctx.program, "u_baseColorTexture"), ctx.baseColorTextureId);
     glUniform1i(glGetUniformLocation(ctx.program, "u_normalTexture"), ctx.normalMapTextureId);
     glUniform1i(glGetUniformLocation(ctx.program, "u_cubemap"), ctx.cubemapId);
+
+    glActiveTexture(GL_TEXTURE11);
+    glBindTexture(GL_TEXTURE_2D, ctx.light.shadowmap);
+    glUniform1i(glGetUniformLocation(ctx.program, "u_shadowmap"), 11);
 
     // Lighting Parameters
     glUniform3fv(glGetUniformLocation(ctx.program, "u_lightPosition"), 1, &ctx.lightPosition[0]);
