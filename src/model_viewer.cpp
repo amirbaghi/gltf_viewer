@@ -47,6 +47,7 @@ struct Context {
     // Textures
     gltf::TextureList textures;
     int baseColorTextureId = 9;
+    int normalMapTextureId = 10;
 
     // Cube Map Active Texture ID
     int cubemapId;
@@ -66,8 +67,10 @@ struct Context {
     bool useOrthographicProjection = false;
     bool useGammaCorrection = true;
     bool useCubemap = false;
+
     bool visualiseTextureCoords = false;
-    bool useTexture = true;
+    bool useDiffuseTexture = true;
+    bool useNormalTexture = true;
 
     // Add more variables here...
 };
@@ -175,6 +178,7 @@ void draw_scene(Context &ctx)
 
     // Textures and Cubemaps
     glUniform1i(glGetUniformLocation(ctx.program, "u_baseColorTexture"), ctx.baseColorTextureId);
+    glUniform1i(glGetUniformLocation(ctx.program, "u_normalTexture"), ctx.normalMapTextureId);
     glUniform1i(glGetUniformLocation(ctx.program, "u_cubemap"), ctx.cubemapId);
 
     // Lighting Parameters
@@ -192,9 +196,12 @@ void draw_scene(Context &ctx)
     glUniform1i(glGetUniformLocation(ctx.program, "u_useNormalsAsColor"), ctx.useNormalsAsColor);
     glUniform1i(glGetUniformLocation(ctx.program, "u_useGammaCorrection"), ctx.useGammaCorrection);
     glUniform1i(glGetUniformLocation(ctx.program, "u_useCubemap"), ctx.useCubemap);
+
     glUniform1i(glGetUniformLocation(ctx.program, "u_visualiseTexCoords"), ctx.visualiseTextureCoords);
-    glUniform1i(glGetUniformLocation(ctx.program, "u_useTexture"), ctx.useTexture);
-    glUniform1i(glGetUniformLocation(ctx.program, "u_hasTexture"), false);
+    glUniform1i(glGetUniformLocation(ctx.program, "u_useDiffuseTexture"), ctx.useDiffuseTexture);
+    glUniform1i(glGetUniformLocation(ctx.program, "u_useNormalTexture"), ctx.useNormalTexture);
+    glUniform1i(glGetUniformLocation(ctx.program, "u_hasDiffuseTexture"), false);
+    glUniform1i(glGetUniformLocation(ctx.program, "u_hasNormalTexture"), false);
 
     // ...
 
@@ -217,18 +224,23 @@ void draw_scene(Context &ctx)
             const gltf::PBRMetallicRoughness &pbr = material.pbrMetallicRoughness;
 
             // Define material textures and uniforms
+            // If there is a base color texture
             if (pbr.hasBaseColorTexture)
             {
                 GLuint texture_id = ctx.textures[pbr.baseColorTexture.index];
                 glActiveTexture(GL_TEXTURE0 + ctx.baseColorTextureId);
                 glBindTexture(GL_TEXTURE_2D, texture_id);
-                glUniform1i(glGetUniformLocation(ctx.program, "u_hasTexture"), true);
+                glUniform1i(glGetUniformLocation(ctx.program, "u_hasDiffuseTexture"), true);
             }
-            else
+            //If there is a normal/bump map texture
+            if (material.hasNormalTexture)
             {
-                // If no texture is defined, set the hasTexture flag to 0
-                glUniform1i(glGetUniformLocation(ctx.program, "u_hasTexture"), false);
+                GLuint texture_id = ctx.textures[material.normalTexture.index];
+                glActiveTexture(GL_TEXTURE0 + ctx.normalMapTextureId);
+                glBindTexture(GL_TEXTURE_2D, texture_id);
+                glUniform1i(glGetUniformLocation(ctx.program, "u_hasNormalTexture"), true);
             }
+
         }
 
         // Draw object
@@ -372,7 +384,7 @@ void show_gui_widgets(Context& ctx)
         ImGui::ColorEdit3("Specular Color", &ctx.specularColor[0]);
         ImGui::InputFloat("Specular Power", &ctx.specularPower);
         ImGui::Checkbox("Use Specular Lighting", &ctx.useSpecularLighting);
-        ImGui::SliderFloat3("Light Source Position", &ctx.lightPosition[0], 0.0f, 1.0f);
+        ImGui::SliderFloat3("Light Source Position", &ctx.lightPosition[0], 0.0f, 255.0f);
     }
 
     // Enivronment Mapping
@@ -385,7 +397,8 @@ void show_gui_widgets(Context& ctx)
     // Texture Mapping
     if (ImGui::CollapsingHeader("Texture Mapping"))
     {
-        ImGui::Checkbox("Use Texture Mapping", &ctx.useTexture);
+        ImGui::Checkbox("Use Diffuse (Base Color) Texture", &ctx.useDiffuseTexture);
+        ImGui::Checkbox("Use Normal Texture", &ctx.useNormalTexture);
         ImGui::Checkbox("Visualise Texture Coordinates", &ctx.visualiseTextureCoords);
     }
 

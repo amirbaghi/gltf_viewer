@@ -16,15 +16,19 @@ uniform bool u_useSpecularLighting;
 uniform bool u_useNormalsAsColor;
 uniform bool u_useGammaCorrection;
 uniform bool u_useCubemap;
+
 uniform bool u_visualiseTexCoords;
-uniform bool u_hasTexture;
-uniform bool u_useTexture;
+uniform bool u_hasDiffuseTexture;
+uniform bool u_hasNormalTexture;
+uniform bool u_useDiffuseTexture;
+uniform bool u_useNormalTexture;
 
 // Cubemap
 uniform samplerCube u_cubemap;
 
 // Textures
 uniform sampler2D u_baseColorTexture;
+uniform sampler2D u_normalTexture;
 
 // ...
 
@@ -40,26 +44,39 @@ in vec2 v_texcoord_0;
 // Fragment shader outputs
 out vec3 frag_color;
 
+// Calculate the tangent space matrix
+mat3 tangent_space(vec3 eye, vec2 texcoord, vec3 normal)
+{
+    // Compute pixel derivatives
+    vec3 delta_pos1 = dFdx(eye);
+    vec3 delta_pos2 = dFdy(eye);
+    vec2 delta_uv1 = dFdx(texcoord);
+    vec2 delta_uv2 = dFdy(texcoord);
+
+    // Compute tangent space vectors
+    vec3 N = normal;
+    vec3 T = normalize(delta_pos1 * delta_uv2.y -
+                       delta_pos2 * delta_uv1.y);
+    vec3 B = normalize(delta_pos2 * delta_uv1.x -
+                       delta_pos1 * delta_uv2.x);
+    return mat3(T, B, N);
+}
+
 void main()
 {
-    // Calculate the diffuse (Lambertian) reflection term
-    float diffuse = max(0.0, dot(N, L));
-
-    // Calculate the specular term
-    vec3 H = normalize(L + V);
-    float specular = pow(dot(N, H), u_specularPower);
-
-    // Calculate the reflection vector
-    vec3 R = reflect(-V, N);
+    vec3 normal = N;
 
     // If should visualise the texture coordinates
-    if (u_visualiseTexCoords && u_hasTexture)
+    if (u_visualiseTexCoords && (u_hasDiffuseTexture || u_hasNormalTexture))
     {
         frag_color = vec3(v_texcoord_0.x, v_texcoord_0.y, 0.0);
     }
     // If should use the cubemap
     else if (u_useCubemap)
     {
+        // Calculate the reflection vector
+        vec3 R = reflect(-V, N);
+
         frag_color = texture(u_cubemap, R).rgb;
     }
     else
@@ -72,10 +89,9 @@ void main()
         // Otherwise
         else
         {
-            // If the object has a texture and should use it
-            if (u_useTexture && u_hasTexture)
+            // If we have a diffuse texture
+            if (u_useDiffuseTexture && u_hasDiffuseTexture)
             {
-     
                 frag_color = texture(u_baseColorTexture, v_texcoord_0).rgb;
             }
             else
@@ -83,9 +99,34 @@ void main()
                 frag_color = v_color;
             }
 
+            // If we have a normal texture
+            if (u_hasNormalTexture && u_useNormalTexture)
+            {
+                // Calculate the tangent space matrix
+                mat3 TBN = tangent_space(V, v_texcoord_0, N);
+
+                // Calculate the normal vector from the height map
+                float delta = 0.0010000000474974513;
+                vec3 t = vec3(1, 0, texture(u_normalTexture, v_texcoord_0 + vec2(delta, 0.0)).r - texture(u_normalTexture, v_texcoord_0 + vec2(-delta, 0.0)).r);
+                vec3 s = vec3(0, 1, texture(u_normalTexture, v_texcoord_0 + vec2(0.0, delta)).r - texture(u_normalTexture, v_texcoord_0 + vec2(0.0, -delta)).r);
+                normal = cross(t, s);
+
+                // Transform the normal vector from tangent space to object space
+                normal = normalize(TBN * normal);
+            }
+
             // If should use lighting
             if (u_useLighting)
             {
+                // Calculate the diffuse (Lambertian) reflection term
+                float diffuse = max(0.0, dot(normal, L));
+
+                // float diffuse = clamp(dot(normal, L), 0, 1);
+
+                // Calculate the specular term
+                vec3 H = normalize(L + V);
+                float specular = max(0.0, pow(dot(normal, H), u_specularPower));
+
                 // Calculate the final color of the vertex by adding the ambient, diffuse, and specular terms
                 // multiplied by their respective colors (i.e. Blinn-Phong Lighting) to the color of the object itself.
                 if (u_useAmbientLighting)
