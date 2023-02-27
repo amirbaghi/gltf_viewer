@@ -23,6 +23,15 @@
 #include <cstdlib>
 #include <iostream>
 
+// Struct for representing a shadow casting point light
+struct ShadowCastingLight {
+    glm::vec3 position;      // Light source position
+    glm::mat4 shadowMatrix;  // Camera matrix for shadowmap
+    GLuint shadowmap;        // Depth texture
+    GLuint shadowFBO;        // Depth framebuffer
+    float shadowBias;        // Bias for depth comparison
+};
+
 // Struct for our application context
 struct Context {
     int width = 512;
@@ -36,6 +45,11 @@ struct Context {
     float elapsedTime;
     std::string gltfFilename = "armadillo.gltf";
     glm::vec4 backgroundColor = glm::vec4(0);
+    
+    // Shadow Mapping
+    ShadowCastingLight light;
+    GLuint shadowProgram;
+    bool showShadowMap = false;
 
     // Lighting Parameters
     glm::vec3 ambientColor = glm::vec3(0.01);
@@ -126,15 +140,16 @@ void load_cubemaps(Context &ctx, std::string cubemap_name)
     }
 }
 
-void do_initialization(Context &ctx)
+void initialize_shadow_map(Context &ctx)
 {
-    ctx.program = cg::load_shader_program(shader_dir() + "mesh.vert", shader_dir() + "mesh.frag");
+    ctx.shadowProgram =
+        cg::load_shader_program(shader_dir() + "shadow.vert", shader_dir() + "shadow.frag");
 
-    load_cubemaps(ctx, "Forrest");
-
-    gltf::load_gltf_asset(ctx.gltfFilename, gltf_dir(), ctx.asset);
-    gltf::create_drawables_from_gltf_asset(ctx.drawables, ctx.asset);
-    gltf::create_textures_from_gltf_asset(ctx.textures, ctx.asset);
+    ctx.light.shadowmap = cg::create_depth_texture(512, 512);
+    ctx.light.shadowFBO = cg::create_depth_framebuffer(ctx.light.shadowmap);
+    ctx.light.shadowBias = 0;
+    ctx.light.shadowMatrix = glm::mat4(1.0f);
+    ctx.light.position = glm::vec3(0, 5, 0);
 }
 
 void calculate_projection(Context &ctx)
@@ -154,6 +169,67 @@ void calculate_projection(Context &ctx)
         // Create prespective projection matrix using the context FOV
         ctx.projectionMatrix = glm::perspective(glm::radians(ctx.fov), (float)ctx.width/ctx.height, 1.0f, 100.0f);
     }    
+}
+
+// Update the shadowmap and shadow matrix for a light source
+void update_shadowmap(Context &ctx, ShadowCastingLight &light, GLuint shadowFBO)
+{
+    // // Set up rendering to shadowmap framebuffer
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, shadowFBO);
+    if (shadowFBO) glViewport(0, 0, 512, 512);  // Set viewport to shadowmap size
+    glClear(GL_DEPTH_BUFFER_BIT);               // Clear depth values to 1.0
+
+    // Set up pipeline
+    glUseProgram(ctx.shadowProgram);
+    // glUseProgram(ctx.program);
+    glEnable(GL_DEPTH_TEST);  // Enable Z-buffering
+
+    // Define view and projection matrices for the shadowmap camera. The
+    // view matrix should be a lookAt-matrix computed from the light source
+    // position, and the projection matrix should be a frustum that covers the
+    // parts of the scene that shall recieve shadows.
+    glm::mat4 view = glm::lookAt(glm::vec3(0, 0, 10), glm::vec3(0,0,0), glm::vec3(0,1,0));
+    glm::mat4 proj = glm::perspective(glm::radians(ctx.fov), (float)512/512, 1.0f, 100.0f);
+
+    glUniformMatrix4fv(glGetUniformLocation(ctx.shadowProgram, "u_view"), 1, GL_FALSE, &view[0][0]);
+    glUniformMatrix4fv(glGetUniformLocation(ctx.shadowProgram, "u_proj"), 1, GL_FALSE, &proj[0][0]);
+
+    // Store updated shadow matrix for use in draw_scene()
+    light.shadowMatrix = proj * view;
+
+    // Draw scene
+    for (unsigned i = 0; i < ctx.asset.nodes.size(); ++i) {
+        const gltf::Node &node = ctx.asset.nodes[i];
+        const gltf::Drawable &drawable = ctx.drawables[node.mesh];
+
+        // Define the model matrix for the drawable
+        glm::mat4 model = glm::scale(glm::toMat4(node.rotation) * glm::translate(glm::mat4(1.0), node.translation), node.scale);
+        glUniformMatrix4fv(glGetUniformLocation(ctx.shadowProgram, "u_model"), 1, GL_FALSE, &model[0][0]);
+
+        // Draw object
+        glBindVertexArray(drawable.vao);
+        glDrawElements(GL_TRIANGLES, drawable.indexCount, drawable.indexType,
+                       (GLvoid *)(intptr_t)drawable.indexByteOffset);
+        glBindVertexArray(0);
+    }
+
+    // Clean up
+    cg::reset_gl_render_state();
+    glUseProgram(0);
+    glViewport(0, 0, ctx.width, ctx.height);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+}
+
+void do_initialization(Context &ctx)
+{
+    ctx.program = cg::load_shader_program(shader_dir() + "mesh.vert", shader_dir() + "mesh.frag");
+
+    load_cubemaps(ctx, "Forrest");
+    initialize_shadow_map(ctx);
+
+    gltf::load_gltf_asset(ctx.gltfFilename, gltf_dir(), ctx.asset);
+    gltf::create_drawables_from_gltf_asset(ctx.drawables, ctx.asset);
+    gltf::create_textures_from_gltf_asset(ctx.textures, ctx.asset);
 }
 
 void draw_scene(Context &ctx)
@@ -264,7 +340,16 @@ void do_rendering(Context &ctx)
     glClearColor(ctx.backgroundColor.r, ctx.backgroundColor.g, ctx.backgroundColor.b, ctx.backgroundColor[3]);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    // Update Shadow Map
+    update_shadowmap(ctx, ctx.light, ctx.light.shadowFBO);
     draw_scene(ctx);
+
+    if (ctx.showShadowMap)
+    {
+        glClearColor(1.0, 1.0, 1.0, 1.0);
+        glClear(GL_COLOR_BUFFER_BIT);
+        update_shadowmap(ctx, ctx.light, 0);
+    }
 }
 
 void reload_shaders(Context *ctx)
@@ -385,6 +470,12 @@ void show_gui_widgets(Context& ctx)
         ImGui::InputFloat("Specular Power", &ctx.specularPower);
         ImGui::Checkbox("Use Specular Lighting", &ctx.useSpecularLighting);
         ImGui::SliderFloat3("Light Source Position", &ctx.lightPosition[0], 0.0f, 255.0f);
+    }
+
+    // Shadow Mapping
+    if (ImGui::CollapsingHeader("Shadow Mapping"))
+    {
+        ImGui::Checkbox("Show Shadow Map", &ctx.showShadowMap);
     }
 
     // Enivronment Mapping
