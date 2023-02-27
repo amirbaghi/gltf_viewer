@@ -51,16 +51,28 @@ float shadowmap_visibility(sampler2D shadowmap, vec4 shadowPos, float bias)
 {
     vec2 delta = vec2(0.5) / textureSize(shadowmap, 0).xy;
 
-    vec2 texcoord = (shadowPos.xy / shadowPos.w) * 0.5 + 0.5;
-    float depth = (shadowPos.z / shadowPos.w) * 0.5 + 0.5;
-    
-    // Sample the shadowmap and compare texels with (depth - bias) to
-    // return a visibility value in range [0, 1]. If you take more
-    // samples (using delta to offset the texture coordinate), the
-    // returned value should be the average of all comparisons.
-    float texel = texture(shadowmap, texcoord).r;
-    float visibility = float(texel > depth - bias);
-    return visibility;
+    float finalVisibility = 0;
+    for (int i = -3; i < 4; i++)
+    {
+        for (int j = -3; j < 4; j++)
+        {
+            vec4 offsetPos = shadowPos + vec4(i * delta.x, j * delta.y, 0.0, 0.0);
+            vec2 texcoord = (offsetPos.xy / offsetPos.w) * 0.5 + 0.5;
+            float depth = (offsetPos.z / offsetPos.w) * 0.5 + 0.5;
+            
+            // Sample the shadowmap and compare texels with (depth - bias) to
+            // return a visibility value in range [0, 1]. If you take more
+            // samples (using delta to offset the texture coordinate), the
+            // returned value should be the average of all comparisons.
+            float texel = texture(shadowmap, texcoord).r;
+            float visibility = float(texel > depth - bias);
+
+            finalVisibility += visibility;
+        }
+    }
+
+    finalVisibility /= 16;
+    return finalVisibility;
 }
 
 // Calculate the tangent space matrix

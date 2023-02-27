@@ -145,7 +145,7 @@ void initialize_shadow_map(Context &ctx)
     ctx.shadowProgram =
         cg::load_shader_program(shader_dir() + "shadow.vert", shader_dir() + "shadow.frag");
 
-    ctx.light.shadowmap = cg::create_depth_texture(512, 512);
+    ctx.light.shadowmap = cg::create_depth_texture(4096, 4096);
     ctx.light.shadowFBO = cg::create_depth_framebuffer(ctx.light.shadowmap);
     ctx.light.shadowBias = 0;
     ctx.light.shadowMatrix = glm::mat4(1.0f);
@@ -176,7 +176,7 @@ void update_shadowmap(Context &ctx, ShadowCastingLight &light, GLuint shadowFBO)
 {
     // // Set up rendering to shadowmap framebuffer
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, shadowFBO);
-    if (shadowFBO) glViewport(0, 0, 512, 512);  // Set viewport to shadowmap size
+    if (shadowFBO) glViewport(0, 0, 4096, 4096);  // Set viewport to shadowmap size
     glClear(GL_DEPTH_BUFFER_BIT);               // Clear depth values to 1.0
 
     // Set up pipeline
@@ -189,7 +189,7 @@ void update_shadowmap(Context &ctx, ShadowCastingLight &light, GLuint shadowFBO)
     // position, and the projection matrix should be a frustum that covers the
     // parts of the scene that shall recieve shadows.
     glm::mat4 view = glm::lookAt(glm::vec3(2, 2, 2), glm::vec3(0,0,0), glm::vec3(0,1,0)) * glm::mat4(ctx.trackball.orient);
-    glm::mat4 proj = glm::perspective(glm::radians(45.0f), (float)512/512, 1.0f, 100.0f);
+    glm::mat4 proj = glm::perspective(glm::radians(45.0f), (float)4096/4096, 1.0f, 100.0f);
 
     glUniformMatrix4fv(glGetUniformLocation(ctx.shadowProgram, "u_view"), 1, GL_FALSE, &view[0][0]);
     glUniformMatrix4fv(glGetUniformLocation(ctx.shadowProgram, "u_proj"), 1, GL_FALSE, &proj[0][0]);
