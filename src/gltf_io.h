@@ -8,9 +8,10 @@
 #include "gltf_scene.h"
 
 #include <string>
-
+#define _BASE64_H_
 namespace gltf {
-
+typedef unsigned char BYTE;
+std::vector<unsigned char> base64_decode(std::string const &);
 bool load_gltf_asset(const std::string &filename, const std::string &filedir, GLTFAsset &asset);
 
 }  // namespace gltf

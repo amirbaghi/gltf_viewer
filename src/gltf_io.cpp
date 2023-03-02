@@ -16,10 +16,59 @@
 #include <cstring>
 #include <iostream>
 #include <vector>
+#include <bitset>
 
 namespace json = rapidjson;  // Use shorter alias for namespace
 
 namespace gltf {
+
+    static const std::string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                                        "abcdefghijklmnopqrstuvwxyz"
+                                        "0123456789+/";
+
+static inline bool is_base64(BYTE c)
+{
+    return (isalnum(c) || (c == '+') || (c == '/'));
+}
+
+std::vector<unsigned char> base64_decode(std::string const &encoded_string)
+{
+    int in_len = encoded_string.size();
+    int i = 0;
+    int j = 0;
+    int in_ = 0;
+    BYTE char_array_4[4], char_array_3[3];
+    std::vector<BYTE> ret;
+
+    while (in_len-- && (encoded_string[in_] != '=') && is_base64(encoded_string[in_])) {
+        char_array_4[i++] = encoded_string[in_];
+        in_++;
+        if (i == 4) {
+            for (i = 0; i < 4; i++) char_array_4[i] = base64_chars.find(char_array_4[i]);
+
+            char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
+            char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
+            char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
+
+            for (i = 0; (i < 3); i++) ret.push_back(char_array_3[i]);
+            i = 0;
+        }
+    }
+
+    if (i) {
+        for (j = i; j < 4; j++) char_array_4[j] = 0;
+
+        for (j = 0; j < 4; j++) char_array_4[j] = base64_chars.find(char_array_4[j]);
+
+        char_array_3[0] = (char_array_4[0] << 2) + ((char_array_4[1] & 0x30) >> 4);
+        char_array_3[1] = ((char_array_4[1] & 0xf) << 4) + ((char_array_4[2] & 0x3c) >> 2);
+        char_array_3[2] = ((char_array_4[2] & 0x3) << 6) + char_array_4[3];
+
+        for (j = 0; (j < i - 1); j++) ret.push_back(char_array_3[j]);
+    }
+
+    return ret;
+}
 
 static bool load_file_to_bytebuffer(const std::string &filename, std::vector<char> &buffer)
 {
@@ -36,6 +85,16 @@ static bool load_file_to_bytebuffer(const std::string &filename, std::vector<cha
     buffer.resize(numBytes);
     buffer.resize(std::fread(&buffer[0], sizeof(char), numBytes, stream));
     std::fclose(stream);
+    return true;
+}
+
+static bool load_byte64_to_bytebuffer(const std::vector<unsigned char> decoded_data, std::vector<char>& buffer) {
+    
+    int numBytes = decoded_data.size();
+    
+
+    buffer.resize(numBytes);
+    buffer.assign(decoded_data.begin(), decoded_data.end());
     return true;
 }
 
@@ -375,8 +434,11 @@ static std::vector<Buffer> create_buffers_from_json(const json::Value &value)
 
 bool load_gltf_asset(const std::string &filename, const std::string &filedir, GLTFAsset &asset)
 {
+    
     json::Document root;
     std::vector<char> buffer;
+    
+    
     if (!load_file_to_bytebuffer(filedir + filename, buffer)) {
         std::cerr << "Error: Could not open " << filename << std::endl;
         return false;
@@ -409,8 +471,15 @@ bool load_gltf_asset(const std::string &filename, const std::string &filedir, GL
         auto images = create_images_from_json(root["images"]);
         // Now also load the actual image data (from image files)
         for (unsigned i = 0; i < images.size(); ++i) {
-            load_image_to_bytebuffer(filedir + images[i].uri, images[i].data, images[i].width,
-                                     images[i].height);
+            if (images[i].uri.find(".png") != std::string::npos &&
+                images[i].uri.find(".jpeg") != std::string::npos) {
+                //todo: implement loading function with image width and height
+            }
+            else {
+                load_image_to_bytebuffer(filedir + images[i].uri, images[i].data, images[i].width,
+                                         images[i].height);
+            }
+            
         }
         asset.images = images;
     }
@@ -437,9 +506,16 @@ bool load_gltf_asset(const std::string &filename, const std::string &filedir, GL
 
     if (root.HasMember("buffers")) {
         auto buffers = create_buffers_from_json(root["buffers"]);
+
         // Now also load the actual buffer data (from .bin files)
         for (unsigned i = 0; i < buffers.size(); ++i) {
-            load_file_to_bytebuffer(filedir + buffers[i].uri, buffers[i].data);
+            if (buffers[i].uri.find(".bin")==std::string::npos) {
+                load_byte64_to_bytebuffer(base64_decode(buffers[i].uri), buffers[i].data);
+                
+            } else {
+                load_file_to_bytebuffer(filedir + buffers[i].uri, buffers[i].data);
+            }
+            
         }
         asset.buffers = buffers;
     }
