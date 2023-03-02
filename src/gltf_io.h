@@ -10,8 +10,11 @@
 #include <string>
 #define _BASE64_H_
 namespace gltf {
+
+// Code for decoding a base64 string to a vector of bytes.    
 typedef unsigned char BYTE;
-std::vector<unsigned char> base64_decode(std::string const &);
+std::vector<unsigned char> base64_decode(std::string const &encoded_string);
+
 bool load_gltf_asset(const std::string &filename, const std::string &filedir, GLTFAsset &asset);
 
 }  // namespace gltf

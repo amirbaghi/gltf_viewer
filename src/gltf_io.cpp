@@ -22,15 +22,19 @@ namespace json = rapidjson;  // Use shorter alias for namespace
 
 namespace gltf {
 
-    static const std::string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+// Base64 characters used for decoding
+static const std::string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
                                         "abcdefghijklmnopqrstuvwxyz"
                                         "0123456789+/";
 
+// Check if a character is a valid base64 character
 static inline bool is_base64(BYTE c)
 {
     return (isalnum(c) || (c == '+') || (c == '/'));
 }
 
+// Decode a base64 string to a vector of bytes
+// Code from https://stackoverflow.com/questions/180947/base64-decode-snippet-in-c
 std::vector<unsigned char> base64_decode(std::string const &encoded_string)
 {
     int in_len = encoded_string.size();
@@ -88,7 +92,8 @@ static bool load_file_to_bytebuffer(const std::string &filename, std::vector<cha
     return true;
 }
 
-static bool load_byte64_to_bytebuffer(const std::vector<unsigned char> decoded_data, std::vector<char>& buffer) {
+// Load a base64 encoded file to a byte buffer
+static bool load_byte64_file_to_bytebuffer(const std::vector<unsigned char> decoded_data, std::vector<char>& buffer) {
     
     int numBytes = decoded_data.size();
     
@@ -112,6 +117,23 @@ static bool load_image_to_bytebuffer(const std::string &filename, std::vector<ch
     width = w, height = h;
     buffer.resize(width * height * 4);
     std::memcpy(&buffer[0], image, width * height * 4);
+    stbi_image_free(image);  // Clean up resources
+    return true;
+}
+
+// Load a base64 encoded image to a byte buffer
+static bool load_base64_image_to_bytebuffer(const std::vector<unsigned char> &decoded_data, std::vector<char> &buffer)
+{
+    // Load image file (ask for RGBA format with four components)
+    int w, h, c;
+    uint8_t *image = stbi_load_from_memory((const stbi_uc *)decoded_data.data(), decoded_data.size(), &w, &h, &c, 4);
+    if (image == nullptr) {
+        std::cerr << "Error: " << stbi_failure_reason() << std::endl;
+        return false;
+    }
+
+    buffer.resize(w * h * 4);
+    std::memcpy(&buffer[0], image, w * h * 4);
     stbi_image_free(image);  // Clean up resources
     return true;
 }
@@ -473,7 +495,7 @@ bool load_gltf_asset(const std::string &filename, const std::string &filedir, GL
         for (unsigned i = 0; i < images.size(); ++i) {
             if (images[i].uri.find(".png") != std::string::npos &&
                 images[i].uri.find(".jpeg") != std::string::npos) {
-                //todo: implement loading function with image width and height
+                load_base64_image_to_bytebuffer(base64_decode(images[i].uri), images[i].data);
             }
             else {
                 load_image_to_bytebuffer(filedir + images[i].uri, images[i].data, images[i].width,
@@ -507,12 +529,14 @@ bool load_gltf_asset(const std::string &filename, const std::string &filedir, GL
     if (root.HasMember("buffers")) {
         auto buffers = create_buffers_from_json(root["buffers"]);
 
-        // Now also load the actual buffer data (from .bin files)
+        // Now also load the actual buffer data (from .bin files/base64 encoded strings)
         for (unsigned i = 0; i < buffers.size(); ++i) {
+            // IF the buffer is base64 encoded, decode it first
             if (buffers[i].uri.find(".bin")==std::string::npos) {
-                load_byte64_to_bytebuffer(base64_decode(buffers[i].uri), buffers[i].data);
-                
-            } else {
+                load_byte64_file_to_bytebuffer(base64_decode(buffers[i].uri), buffers[i].data);
+            }
+            // Else, load the buffer from a .bin file 
+            else {
                 load_file_to_bytebuffer(filedir + buffers[i].uri, buffers[i].data);
             }
             

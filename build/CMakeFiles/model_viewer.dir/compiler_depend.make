@@ -1444,7 +1444,8 @@ CMakeFiles/model_viewer.dir/src/gltf_io.cpp.o: ../src/gltf_io.cpp \
   /usr/include/c++/11/bits/basic_ios.tcc \
   /usr/include/c++/11/bits/ostream.tcc \
   /usr/include/c++/11/istream \
-  /usr/include/c++/11/bits/istream.tcc
+  /usr/include/c++/11/bits/istream.tcc \
+  /usr/include/c++/11/bitset
 
 CMakeFiles/model_viewer.dir/src/gltf_render.cpp.o: ../src/gltf_render.cpp \
   /usr/include/stdc-predef.h \
@@ -2572,6 +2573,8 @@ CMakeFiles/model_viewer.dir/src/model_viewer.cpp.o: ../src/model_viewer.cpp \
 ../src/model_viewer.cpp:
 
 ../src/gltf_render.cpp:
+
+/usr/include/c++/11/bitset:
 
 /usr/include/c++/11/bits/stream_iterator.h:
 
