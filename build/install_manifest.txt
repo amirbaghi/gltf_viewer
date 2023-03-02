@@ -1,1 +1,0 @@
-/mnt/e/Amirz/ComputerGraphicsStuff/Assignments/gltf_viewer/bin/model_viewer

@@ -93,10 +93,16 @@ static bool load_file_to_bytebuffer(const std::string &filename, std::vector<cha
 }
 
 // Load a base64 encoded file to a byte buffer
+<<<<<<< Updated upstream
 static bool load_byte64_file_to_bytebuffer(const std::vector<unsigned char> decoded_data, std::vector<char>& buffer) {
     
+=======
+static bool load_byte64_file_to_bytebuffer(const std::vector<unsigned char> decoded_data,
+                                           std::vector<char> &buffer)
+{
+
+>>>>>>> Stashed changes
     int numBytes = decoded_data.size();
-    
 
     buffer.resize(numBytes);
     buffer.assign(decoded_data.begin(), decoded_data.end());
@@ -122,19 +128,37 @@ static bool load_image_to_bytebuffer(const std::string &filename, std::vector<ch
 }
 
 // Load a base64 encoded image to a byte buffer
+<<<<<<< Updated upstream
 static bool load_base64_image_to_bytebuffer(const std::vector<unsigned char> &decoded_data, std::vector<char> &buffer)
 {
     // Load image file (ask for RGBA format with four components)
     int w, h, c;
     uint8_t *image = stbi_load_from_memory((const stbi_uc *)decoded_data.data(), decoded_data.size(), &w, &h, &c, 4);
+=======
+static bool load_base64_image_to_bytebuffer(const std::vector<unsigned char> decoded_data,
+                                            std::vector<char> &buffer, int &width, int &height)
+{
+    // Load image file (ask for RGBA format with four components)
+    int w, h, c;
+    uint8_t *image = stbi_load_from_memory((const stbi_uc *)decoded_data.data(),
+                                           decoded_data.size(), &w, &h, &c, 4);
+>>>>>>> Stashed changes
     if (image == nullptr) {
         std::cerr << "Error: " << stbi_failure_reason() << std::endl;
         return false;
     }
+<<<<<<< Updated upstream
 
     buffer.resize(w * h * 4);
     std::memcpy(&buffer[0], image, w * h * 4);
     stbi_image_free(image);  // Clean up resources
+=======
+    width = w, height = h;
+    buffer.resize(w * h * 4);
+    std::memcpy(&buffer[0], image, w * h * 4);
+    stbi_image_free(image);  // Clean up resources
+
+>>>>>>> Stashed changes
     return true;
 }
 
@@ -456,11 +480,10 @@ static std::vector<Buffer> create_buffers_from_json(const json::Value &value)
 
 bool load_gltf_asset(const std::string &filename, const std::string &filedir, GLTFAsset &asset)
 {
-    
+
     json::Document root;
     std::vector<char> buffer;
-    
-    
+
     if (!load_file_to_bytebuffer(filedir + filename, buffer)) {
         std::cerr << "Error: Could not open " << filename << std::endl;
         return false;
@@ -490,18 +513,27 @@ bool load_gltf_asset(const std::string &filename, const std::string &filedir, GL
     }
 
     if (root.HasMember("images")) {
+
         auto images = create_images_from_json(root["images"]);
         // Now also load the actual image data (from image files)
         for (unsigned i = 0; i < images.size(); ++i) {
+<<<<<<< Updated upstream
             if (images[i].uri.find(".png") != std::string::npos &&
                 images[i].uri.find(".jpeg") != std::string::npos) {
                 load_base64_image_to_bytebuffer(base64_decode(images[i].uri), images[i].data);
             }
             else {
+=======
+            int j = images[i].uri.find("base64");
+            if (j != std::string::npos) {
+                images[i].uri.erase(0, j + 7);
+                load_base64_image_to_bytebuffer(base64_decode(images[i].uri), images[i].data,
+                                                images[i].width, images[i].height);
+            } else {
+>>>>>>> Stashed changes
                 load_image_to_bytebuffer(filedir + images[i].uri, images[i].data, images[i].width,
                                          images[i].height);
             }
-            
         }
         asset.images = images;
     }
@@ -532,14 +564,20 @@ bool load_gltf_asset(const std::string &filename, const std::string &filedir, GL
         // Now also load the actual buffer data (from .bin files/base64 encoded strings)
         for (unsigned i = 0; i < buffers.size(); ++i) {
             // IF the buffer is base64 encoded, decode it first
+<<<<<<< Updated upstream
             if (buffers[i].uri.find(".bin")==std::string::npos) {
                 load_byte64_file_to_bytebuffer(base64_decode(buffers[i].uri), buffers[i].data);
             }
             // Else, load the buffer from a .bin file 
+=======
+            if (buffers[i].uri.find(".bin") == std::string::npos) {
+                load_byte64_file_to_bytebuffer(base64_decode(buffers[i].uri), buffers[i].data);
+            }
+            // Else, load the buffer from a .bin file
+>>>>>>> Stashed changes
             else {
                 load_file_to_bytebuffer(filedir + buffers[i].uri, buffers[i].data);
             }
-            
         }
         asset.buffers = buffers;
     }
